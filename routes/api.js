@@ -3,11 +3,12 @@ var router = express.Router();
 const models = require('../models')
 const { Op } = require("sequelize");
 const path = require("path")
-const fs = require('fs')
+const fs = require('fs');
+const { error } = require('console');
 
 /* GET home page. */
 router.get('/phonebooks', async function (req, res, next) {
-    const { page = 1, limit = 10, keyword = '', sort = 'ASC' } = req.query
+    const { page = 1, limit = 50, keyword = '', sort = 'ASC' } = req.query
 
     try {
         const { count, rows } = await models.Phonebooks.findAndCountAll({
@@ -17,32 +18,35 @@ router.get('/phonebooks', async function (req, res, next) {
                     { phone: { [Op.like]: `%${keyword}%` } }
                 ]
             },
-            order: [['name', sort]]
+            order: [['name', sort]],
+            limit,
+            offset: (page - 1) * limit
         })
         const pages = Math.ceil(count / limit)
         res.status(200).json({ phonebooks: rows, page, limit, pages, total: count })
     } catch (err) {
-        console.log(err)
         res.status(500).json(err)
     }
 });
 
 router.post('/phonebooks', async function (req, res, next) {
     try {
-        const { name, phone, avatar } = req.body
-        const phonebooks = await models.Phonebooks.create({ name, phone, avatar }, {
+        const { name, phone } = req.body
+        if(!name && !phone) throw Error.message = "name and phone don't be empty"
+        const phonebooks = await models.Phonebooks.create({ name, phone}, {
             returning: true,
             plain: true
         });
         res.status(201).json(phonebooks)
-    } catch (err) {
-        res.status(500).json(err)
+    } catch (Error) {
+        res.status(500).json({Error})
     }
 });
 
 router.put('/phonebooks/:id', async function (req, res, next) {
-    const { name, phone } = req.body;
     try {
+        const { name, phone } = req.body
+        if(!name && !phone) throw Error.message = "name and phone don't be empty"
         const phonebooks = await models.Phonebooks.update({ name, phone }, {
             where: {
                 id: req.params.id
@@ -51,8 +55,8 @@ router.put('/phonebooks/:id', async function (req, res, next) {
             plain: true
         });
         res.status(201).json(phonebooks[1])
-    } catch (err) {
-        res.status(500).json(err)
+    } catch (Error) {
+        res.status(500).json({Error})
     }
 });
 
@@ -65,7 +69,6 @@ router.delete('/phonebooks/:id', async function (req, res, next) {
             plain: true
         });
         if (deletephone) {
-            console.log(phonebooks)
             res.status(200).json(phonebooks)
         } else throw res.status(500).json(err)
     } catch (err) {
@@ -77,10 +80,9 @@ router.put('/phonebooks/:id/avatar', async function (req, res, next) {
     let avatar;
     let uploadPath;
 
-    console.log(req.files.avatar)
 
     if (!req.files || Object.keys(req.files).length === 0) {
-        return res.status(400).send('No files were uploaded.');
+        return res.status(400).json({error: 'No files were uploaded.'});
     }
     
     avatar = req.files.avatar;
